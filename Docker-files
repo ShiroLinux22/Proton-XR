@@ -1,0 +1,561 @@
+FROM @PROTONSDK_URLBASE@/build-base-@ARCH@:latest AS build
+RUN wget -q @BINUTILS_URLBASE@/@BINUTILS_SOURCE@ \
+&& echo '@BINUTILS_SHA256@ @BINUTILS_SOURCE@' | sha256sum -c - \
+&& tar xf @BINUTILS_SOURCE@ -C /tmp && rm @BINUTILS_SOURCE@ \
+&& cd /tmp/binutils-@BINUTILS_VERSION@ \
+&& ./configure --quiet \
+  --prefix=/usr \
+  --libdir=/usr/lib \
+  --host=@ARCH@-linux-gnu \
+  --build=@ARCH@-linux-gnu \
+  --target=@ARCH@-@TARGET@ \
+  --program-prefix=@ARCH@-@TARGET@- \
+  --enable-gold \
+  --enable-ld=default \
+  --enable-lto \
+  --enable-static \
+  --disable-multilib \
+  --disable-nls \
+  --disable-plugins \
+  --disable-shared \
+  --disable-werror \
+  --with-gmp \
+  --with-isl \
+  --with-mpc \
+  --with-mpfr \
+  --with-system-zlib \
+  MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true configure-host \
+&& make --quiet -j@J@ MAKEINFO=true LDFLAGS="-static" \
+&& make --quiet -j@J@ MAKEINFO=true install-strip DESTDIR=/opt \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /tmp/bFROM @BASE_IMAGE@ AS base
+RUN apt-get update && apt-get install -y \
+  autoconf \
+  bzip2 \
+  g++ \
+  gcc \
+  libgmp-dev \
+  libisl-dev \
+  libmpc-dev \
+  libmpfr-dev \
+  libtool \
+  libz-dev \
+  make \
+  wget \
+  xz-utils \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /var/lib/apt/lists/*
+inutils-@BINUTILS_VERSION@
+FROM @PROTONSDK_URLBASE@/binutils-@ARCH@-@TARGET@:@BINUTILS_VERSION@ AS binutils
+FROM @PROTONSDK_URLBASE@/mingw-headers-@ARCH@:@MINGW_VERSION@ AS mingw-headers
+FROM @PROTONSDK_URLBASE@/mingw-crt-@ARCH@:@MINGW_VERSION@ AS mingw-crt
+FROM @PROTONSDK_URLBASE@/mingw-pthreads-@ARCH@:@MINGW_VERSION@ AS mingw-pthreads
+FROM @PROTONSDK_URLBASE@/build-base-@ARCH@:latest AS build
+COPY --from=binutils       /opt/usr /usr
+COPY --from=mingw-headers  /opt/usr /usr
+COPY --from=mingw-crt      /opt/usr /usr
+COPY --from=mingw-pthreads /opt/usr /usr
+RUN wget -q @GCC_URLBASE@/@GCC_SOURCE@ \
+&& echo '@GCC_SHA256@ @GCC_SOURCE@' | sha256sum -c - \
+&& tar xf @GCC_SOURCE@ -C /tmp && rm @GCC_SOURCE@ \
+&& mkdir /tmp/gcc-@GCC_VERSION@/build && cd /tmp/gcc-@GCC_VERSION@/build \
+&& ../configure --quiet \
+  --prefix=/usr \
+  --libdir=/usr/lib \
+  --libexecdir=/usr/lib \
+  --host=@ARCH@-linux-gnu \
+  --build=@ARCH@-linux-gnu \
+  --target=@ARCH@-@TARGET@ \
+  --program-prefix=@ARCH@-@TARGET@- \
+  --enable-languages=c,c++,lto \
+  --enable-libstdcxx-time=yes \
+  --enable-lto \
+  --enable-threads=posix \
+  --disable-bootstrap \
+  --disable-checking \
+  --disable-multilib \
+  --disable-nls \
+  --disable-plugin \
+  @TARGET_FLAGS@ \
+  --disable-sjlj-exceptions \
+  --disable-werror \
+  --with-arch=nocona \
+  --with-default-libstdcxx-abi=new \
+  --with-dwarf2 \
+  --with-system-gmp \
+  --with-system-isl \
+  --with-system-mpc \
+  --with-system-mpfr \
+  --with-system-zlib \
+  --with-tune=core-avx2 \
+  MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true CFLAGS="-static --static" LDFLAGS="-s -static --static" \
+&& make --quiet -j@J@ MAKEINFO=true CFLAGS="-static --static" LDFLAGS="-s -static --static" install-strip DESTDIR=/opt \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /tmp/gcc-@GCC_VERSION@STEAMRT_VERSION = 0.20210505.0
+STEAMRT_URLBASE = registry.gitlab.steamos.cloud
+
+PROTONSDK_URLBASE = $(STEAMRT_URLBASE)/proton/soldier/sdk
+PROTONSDK_VERSION = $(STEAMRT_VERSION)-0-dev
+
+# this is just for building toolchain, as we do static builds it should
+# not have any impact on the end result, but changing it will invalidate
+# docker caches, so we need something that don't change much
+BASE_IMAGE_i686 = i386/ubuntu:18.04
+BASE_IMAGE_x86_64 = ubuntu:18.04
+
+BINUTILS_VERSION = 2.36.1
+GCC_VERSION = 11.1.0
+MINGW_VERSION = 9.0.0
+RUST_VERSION = 1.50.0
+
+SOURCES_URLBASE = https://repo.steampowered.com/proton-sdk
+BINUTILS_URLBASE = $(SOURCES_URLBASE)
+GCC_URLBASE = $(SOURCES_URLBASE)
+MINGW_URLBASE = $(SOURCES_URLBASE)
+RUST_URLBASE = $(SOURCES_URLBASE)
+
+BINUTILS_SOURCE = binutils-$(BINUTILS_VERSION).tar.xz
+GCC_SOURCE = gcc-$(GCC_VERSION).tar.xz
+MINGW_SOURCE = mingw-w64-v$(MINGW_VERSION).tar.bz2
+RUST_SOURCE_x86_64 = rust-$(RUST_VERSION)-x86_64-unknown-linux-gnu.tar.gz
+RUST_SOURCE_i686 = rust-$(RUST_VERSION)-i686-unknown-linux-gnu.tar.gz
+
+BINUTILS_SHA256 = e81d9edf373f193af428a0f256674aea62a9d74dfe93f65192d4eae030b0f3b0
+GCC_SHA256 = b8dd4368bb9c7f0b98188317ee0254dd8cc99d1e3a18d0ff146c855fe16c1d8c
+MINGW_SHA256 = 44c740ea6ab3924bc3aa169bad11ad3c5766c5c8459e3126d44eabb8735a5762
+RUST_SHA256_x86_64 = fa889b53918980aea2dea42bfae4e858dcb2104c6fdca6e4fe359f3a49767701
+RUST_SHA256_i686 = dee56dc425ed5d8e8112f26fba3060fd324c49f1261e0b7e8e29f7d9b852b09a
+
+DOCKER = docker
+
+%.Dockerfile: %.Dockerfile.in
+	sed -re 's!@PROTONSDK_URLBASE@!$(PROTONSDK_URLBASE)!g' \
+	    -re 's!@BASE_IMAGE@!$(BASE_IMAGE)!g' \
+	    -re 's!@BINUTILS_VERSION@!$(BINUTILS_VERSION)!g' \
+	    -re 's!@BINUTILS_URLBASE@!$(BINUTILS_URLBASE)!g' \
+	    -re 's!@BINUTILS_SOURCE@!$(BINUTILS_SOURCE)!g' \
+	    -re 's!@BINUTILS_SHA256@!$(BINUTILS_SHA256)!g' \
+	    -re 's!@GCC_VERSION@!$(GCC_VERSION)!g' \
+	    -re 's!@GCC_URLBASE@!$(GCC_URLBASE)!g' \
+	    -re 's!@GCC_SOURCE@!$(GCC_SOURCE)!g' \
+	    -re 's!@GCC_SHA256@!$(GCC_SHA256)!g' \
+	    -re 's!@MINGW_VERSION@!$(MINGW_VERSION)!g' \
+	    -re 's!@MINGW_URLBASE@!$(MINGW_URLBASE)!g' \
+	    -re 's!@MINGW_SOURCE@!$(MINGW_SOURCE)!g' \
+	    -re 's!@MINGW_SHA256@!$(MINGW_SHA256)!g' \
+	    -re 's!@RUST_VERSION@!$(RUST_VERSION)!g' \
+	    -re 's!@RUST_URLBASE@!$(RUST_URLBASE)!g' \
+	    -re 's!@RUST_SOURCE_x86_64@!$(RUST_SOURCE_x86_64)!g' \
+	    -re 's!@RUST_SOURCE_i686@!$(RUST_SOURCE_i686)!g' \
+	    -re 's!@RUST_SHA256_x86_64@!$(RUST_SHA256_x86_64)!g' \
+	    -re 's!@RUST_SHA256_i686@!$(RUST_SHA256_i686)!g' \
+	    -re 's!@J@!$(shell nproc)!g' \
+	    $< >$@
+
+%-i686.Dockerfile.in: %.Dockerfile.in
+	sed -re 's!@ARCH@!i686!g' \
+	    $< >$@
+
+%-x86_64.Dockerfile.in: %.Dockerfile.in
+	sed -re 's!@ARCH@!x86_64!g' \
+	    $< >$@
+
+%-linux-gnu.Dockerfile.in: %.Dockerfile.in
+	sed -re 's!@TARGET@!linux-gnu!g' \
+	    -re 's!@TARGET_FLAGS@!$(TARGET_FLAGS)!g' \
+	    $< >$@
+
+%-w64-mingw32.Dockerfile.in: %.Dockerfile.in
+	sed -re 's!@TARGET@!w64-mingw32!g' \
+	    -re 's!@TARGET_FLAGS@!$(TARGET_FLAGS)!g' \
+	    $< >$@
+
+define create-build-base-rules
+.PHONY: build-base-$(1)
+all build-base: build-base-$(1)
+build-base-$(1): BASE_IMAGE = $(BASE_IMAGE_$(1))
+build-base-$(1): build-base-$(1).Dockerfile
+	rm -rf build; mkdir -p build
+	$(DOCKER) build -f $$< \
+	  --cache-from=$(PROTONSDK_URLBASE)/build-base-$(1):latest \
+	  -t $(PROTONSDK_URLBASE)/build-base-$(1):latest \
+	  build
+pull::
+	-$(DOCKER) pull $(PROTONSDK_URLBASE)/build-base-$(1):latest
+push::
+	$(DOCKER) push $(PROTONSDK_URLBASE)/build-base-$(1):latest
+endef
+
+$(eval $(call create-build-base-rules,i686))
+$(eval $(call create-build-base-rules,x86_64))
+
+define create-binutils-rules
+.PHONY: binutils-$(1)-$(2)
+all binutils: binutils-$(1)-$(2)
+binutils-$(1)-$(2): binutils-$(1)-$(2).Dockerfile | build-base
+	rm -rf build; mkdir -p build
+	$(DOCKER) build -f $$< \
+	  --cache-from=$(PROTONSDK_URLBASE)/binutils-$(1)-$(2):$(BINUTILS_VERSION) \
+	  -t $(PROTONSDK_URLBASE)/binutils-$(1)-$(2):$(BINUTILS_VERSION) \
+	  -t $(PROTONSDK_URLBASE)/binutils-$(1)-$(2):latest \
+	  build
+pull::
+	-$(DOCKER) pull $(PROTONSDK_URLBASE)/binutils-$(1)-$(2):$(BINUTILS_VERSION)
+push::
+	$(DOCKER) push $(PROTONSDK_URLBASE)/binutils-$(1)-$(2):$(BINUTILS_VERSION)
+	$(DOCKER) push $(PROTONSDK_URLBASE)/binutils-$(1)-$(2):latest
+endef
+
+$(eval $(call create-binutils-rules,i686,w64-mingw32))
+$(eval $(call create-binutils-rules,i686,linux-gnu))
+$(eval $(call create-binutils-rules,x86_64,w64-mingw32))
+$(eval $(call create-binutils-rules,x86_64,linux-gnu))
+
+define create-mingw-rules
+.PHONY: mingw-$(2)-$(1)
+all mingw: mingw-$(2)-$(1)
+mingw-$(2)-$(1): mingw-$(2)-$(1).Dockerfile | binutils
+	rm -rf build; mkdir -p build
+	$(DOCKER) build -f $$< \
+	  --cache-from=$(PROTONSDK_URLBASE)/mingw-$(2)-$(1):$(MINGW_VERSION) \
+	  -t $(PROTONSDK_URLBASE)/mingw-$(2)-$(1):$(MINGW_VERSION) \
+	  -t $(PROTONSDK_URLBASE)/mingw-$(2)-$(1):latest \
+	  build
+pull::
+	-$(DOCKER) pull $(PROTONSDK_URLBASE)/mingw-$(2)-$(1):$(MINGW_VERSION)
+push::
+	$(DOCKER) push $(PROTONSDK_URLBASE)/mingw-$(2)-$(1):$(MINGW_VERSION)
+	$(DOCKER) push $(PROTONSDK_URLBASE)/mingw-$(2)-$(1):latest
+endef
+
+$(eval $(call create-mingw-rules,i686,headers))
+$(eval $(call create-mingw-rules,i686,gcc))
+$(eval $(call create-mingw-rules,i686,crt))
+$(eval $(call create-mingw-rules,i686,pthreads))
+$(eval $(call create-mingw-rules,i686,widl))
+$(eval $(call create-mingw-rules,x86_64,headers))
+$(eval $(call create-mingw-rules,x86_64,gcc))
+$(eval $(call create-mingw-rules,x86_64,crt))
+$(eval $(call create-mingw-rules,x86_64,pthreads))
+$(eval $(call create-mingw-rules,x86_64,widl))
+
+GCC_TARGET_FLAGS_w64-mingw32 = --disable-shared
+GCC_TARGET_FLAGS_linux-gnu =
+
+define create-gcc-rules
+.PHONY: gcc-$(1)-$(2)
+all gcc: gcc-$(1)-$(2)
+gcc-$(1)-$(2): TARGET_FLAGS = $(GCC_TARGET_FLAGS_$(2))
+gcc-$(1)-$(2): gcc-$(1)-$(2).Dockerfile | mingw
+	rm -rf build; mkdir -p build
+	$(DOCKER) build -f $$< \
+	  --cache-from=$(PROTONSDK_URLBASE)/gcc-$(1)-$(2):$(GCC_VERSION) \
+	  -t $(PROTONSDK_URLBASE)/gcc-$(1)-$(2):$(GCC_VERSION) \
+	  -t $(PROTONSDK_URLBASE)/gcc-$(1)-$(2):latest \
+	  build
+pull::
+	-$(DOCKER) pull $(PROTONSDK_URLBASE)/gcc-$(1)-$(2):$(GCC_VERSION)
+push::
+	$(DOCKER) push $(PROTONSDK_URLBASE)/gcc-$(1)-$(2):$(GCC_VERSION)
+	$(DOCKER) push $(PROTONSDK_URLBASE)/gcc-$(1)-$(2):latest
+endef
+
+$(eval $(call create-gcc-rules,i686,linux-gnu))
+$(eval $(call create-gcc-rules,x86_64,linux-gnu))
+$(eval $(call create-gcc-rules,i686,w64-mingw32))
+$(eval $(call create-gcc-rules,x86_64,w64-mingw32))
+
+define create-proton-rules
+.PHONY: proton
+all: proton
+proton: BASE_IMAGE = $(STEAMRT_URLBASE)/steamrt/soldier/sdk:$(STEAMRT_VERSION)
+proton: proton.Dockerfile | gcc
+	rm -rf build; mkdir -p build
+	$(DOCKER) build -f $$< \
+	  --cache-from=$(PROTONSDK_URLBASE):$(PROTONSDK_VERSION) \
+	  -t $(PROTONSDK_URLBASE):$(PROTONSDK_VERSION) \
+	  -t $(PROTONSDK_URLBASE):latest \
+	  build
+pull::
+	-$(DOCKER) pull $(PROTONSDK_URLBASE):$(PROTONSDK_VERSION)
+push::
+	$(DOCKER) push $(PROTONSDK_URLBASE):$(PROTONSDK_VERSION)
+	$(DOCKER) push $(PROTONSDK_URLBASE):latest
+endef
+
+$(eval $(call create-proton-rules))
+
+sources::
+	rm -f $(BINUTILS_SOURCE)
+	rm -f $(MINGW_SOURCE)
+	rm -f $(GCC_SOURCE)
+	rm -f $(RUST_SOURCE_x86_64)
+	rm -f $(RUST_SOURCE_i686)
+	wget $(BINUTILS_URLBASE)/$(BINUTILS_SOURCE)
+	wget $(MINGW_URLBASE)/$(MINGW_SOURCE)
+	wget $(GCC_URLBASE)/$(GCC_SOURCE)
+	wget $(RUST_URLBASE)/$(RUST_SOURCE_x86_64)
+	wget $(RUST_URLBASE)/$(RUST_SOURCE_i686)
+	echo $(BINUTILS_SHA256) $(BINUTILS_SOURCE) | sha256sum -c -
+	echo $(MINGW_SHA256) $(MINGW_SOURCE) | sha256sum -c -
+	echo $(GCC_SHA256) $(GCC_SOURCE) | sha256sum -c -
+	echo $(RUST_SHA256_x86_64) $(RUST_SOURCE_x86_64) | sha256sum -c -
+	echo $(RFROM @PROTONSDK_URLBASE@/binutils-@ARCH@-w64-mingw32:@BINUTILS_VERSION@ AS binutils
+FROM @PROTONSDK_URLBASE@/mingw-headers-@ARCH@:@MINGW_VERSION@ AS mingw-headers
+FROM @PROTONSDK_URLBASE@/mingw-gcc-@ARCH@:@MINGW_VERSION@ AS mingw-gcc
+FROM @PROTONSDK_URLBASE@/build-base-@ARCH@:latest AS build
+COPY --from=binutils      /opt/usr /usr
+COPY --from=mingw-headers /opt/usr /usr
+COPY --from=mingw-gcc     /opt/usr /usr
+RUN wget -q @MINGW_URLBASE@/@MINGW_SOURCE@ \
+&& echo '@MINGW_SHA256@ @MINGW_SOURCE@' | sha256sum -c - \
+&& tar xf @MINGW_SOURCE@ -C /tmp && rm @MINGW_SOURCE@ \
+&& cd /tmp/mingw-w64-v@MINGW_VERSION@/mingw-w64-crt \
+&& ./configure --quiet \
+  --prefix=/usr/@ARCH@-w64-mingw32/ \
+  --host=@ARCH@-w64-mingw32 \
+  --enable-wildcard \
+  MAKEINFO=true || cat config.log \
+&& make --quiet -j1 MAKEINFO=true \
+&& make --quiet -j1 MAKEINFO=true install-strip DESTDIR=/opt \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /tmp/mingw-w64-v@MINGW_VERSION@
+UST_SHA256_i686) $(RUST_SOURCE_i686) | sha256sum -c -
+FROM @PROTONSDK_URLBASE@/binutils-@ARCH@-w64-mingw32:@BINUTILS_VERSION@ AS binutils
+FROM @PROTONSDK_URLBASE@/mingw-headers-@ARCH@:@MINGW_VERSION@ AS mingw-headers
+FROM @PROTONSDK_URLBASE@/build-base-@ARCH@:latest AS build
+COPY --from=binutils      /opt/usr /usr
+COPY --from=mingw-headers /opt/usr /usr
+RUN wget -q @GCC_URLBASE@/@GCC_SOURCE@ \
+&& echo '@GCC_SHA256@ @GCC_SOURCE@' | sha256sum -c - \
+&& tar xf @GCC_SOURCE@ -C /tmp && rm @GCC_SOURCE@ \
+&& mkdir /tmp/gcc-@GCC_VERSION@/build && cd /tmp/gcc-@GCC_VERSION@/build \
+&& ../configure --quiet \
+  --prefix=/usr \
+  --libdir=/usr/lib \
+  --libexecdir=/usr/lib \
+  --host=@ARCH@-linux-gnu \
+  --build=@ARCH@-linux-gnu \
+  --target=@ARCH@-w64-mingw32 \
+  --program-prefix=@ARCH@-w64-mingw32- \
+  --enable-languages=c \
+  --disable-bootstrap \
+  --disable-checking \
+  --disable-multilib \
+  --disable-nls \
+  --disable-shared \
+  --disable-threads \
+  --disable-werror \
+  --with-system-gmp \
+  --with-system-isl \
+  --with-system-mpc \
+  --with-system-mpfr \
+  --with-system-zlib \
+  MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true CFLAGS="-static --static" LDFLAGS="-s -static --static" all-gcc \
+&& make --quiet -j@J@ MAKEINFO=true CFLAGS="-static --static" LDFLAGS="-s -static --static" install-strip-gcc DESTDIR=/opt \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /tmp/gcc-@GCC_VERSION@FROM @PROTONSDK_URLBASE@/build-base-@ARCH@:latest AS build
+RUN wget -q @MINGW_URLBASE@/@MINGW_SOURCE@ \
+&& echo '@MINGW_SHA256@ @MINGW_SOURCE@' | sha256sum -c - \
+&& tar xf @MINGW_SOURCE@ -C /tmp && rm @MINGW_SOURCE@ \
+&& cd /tmp/mingw-w64-v@MINGW_VERSION@/mingw-w64-headers \
+&& ./configure --quiet \
+  --prefix=/usr/@ARCH@-w64-mingw32/ \
+  --host=@ARCH@-w64-mingw32 \
+  --enable-sdk=all \
+  --enable-secure-api \
+  --enable-idl \
+  MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true install-strip DESTDIR=/opt \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /tmp/mingw-w64-v@MINGW_VERSION@
+FROM @PROTONSDK_URLBASE@/binutils-@ARCH@-w64-mingw32:@BINUTILS_VERSION@ AS binutils
+FROM @PROTONSDK_URLBASE@/mingw-headers-@ARCH@:@MINGW_VERSION@ AS mingw-headers
+FROM @PROTONSDK_URLBASE@/mingw-gcc-@ARCH@:@MINGW_VERSION@ AS mingw-gcc
+FROM @PROTONSDK_URLBASE@/mingw-crt-@ARCH@:@MINGW_VERSION@ AS mingw-crt
+FROM @PROTONSDK_URLBASE@/build-base-@ARCH@:latest AS build
+COPY --from=binutils      /opt/usr /usr
+COPY --from=mingw-headers /opt/usr /usr
+COPY --from=mingw-gcc     /opt/usr /usr
+COPY --from=mingw-crt     /opt/usr /usr
+RUN wget -q @MINGW_URLBASE@/@MINGW_SOURCE@ \
+&& echo '@MINGW_SHA256@ @MINGW_SOURCE@' | sha256sum -c - \
+&& tar xf @MINGW_SOURCE@ -C /tmp && rm @MINGW_SOURCE@ \
+&& cd /tmp/mingw-w64-v@MINGW_VERSION@/mingw-w64-libraries/winpthreads \
+&& ./configure --quiet \
+  --prefix=/usr/@ARCH@-w64-mingw32/ \
+  --host=@ARCH@-w64-mingw32 \
+  --disable-shared \
+  MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true install-strip DESTDIR=/opt \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /tmp/mingw-w64-v@MINGW_VERSION@
+FROM @PROTONSDK_URLBASE@/build-base-@ARCH@:latest AS build
+RUN wget -q @MINGW_URLBASE@/@MINGW_SOURCE@ \
+&& echo '@MINGW_SHA256@ @MINGW_SOURCE@' | sha256sum -c - \
+&& tar xf @MINGW_SOURCE@ -C /tmp && rm @MINGW_SOURCE@ \
+&& cd /tmp/mingw-w64-v@MINGW_VERSION@/mingw-w64-tools/widl \
+&& ./configure --quiet \
+  --prefix=/usr \
+  --host=@ARCH@-linux-gnu \
+  --build=@ARCH@-linux-gnu \
+  --target=@ARCH@-w64-mingw32 \
+  --program-prefix=@ARCH@-w64-mingw32- \
+  MAKEINFO=true \
+&& make --quiet -j@J@ MAKEINFO=true LDFLAGS="-static" \
+&& make --quiet -j@J@ MAKEINFO=true install-strip DESTDIR=/opt \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /tmp/mingw-w64-v@MINGW_VERSION@
+FROM @PROTONSDK_URLBASE@/binutils-i686-linux-gnu:@BINUTILS_VERSION@ AS binutils-linux-i686
+FROM @PROTONSDK_URLBASE@/binutils-x86_64-linux-gnu:@BINUTILS_VERSION@ AS binutils-linux-x86_64
+FROM @PROTONSDK_URLBASE@/binutils-i686-w64-mingw32:@BINUTILS_VERSION@ AS binutils-mingw-i686
+FROM @PROTONSDK_URLBASE@/binutils-x86_64-w64-mingw32:@BINUTILS_VERSION@ AS binutils-mingw-x86_64
+FROM @PROTONSDK_URLBASE@/mingw-headers-i686:@MINGW_VERSION@ AS mingw-headers-i686
+FROM @PROTONSDK_URLBASE@/mingw-headers-x86_64:@MINGW_VERSION@ AS mingw-headers-x86_64
+FROM @PROTONSDK_URLBASE@/mingw-crt-i686:@MINGW_VERSION@ AS mingw-crt-i686
+FROM @PROTONSDK_URLBASE@/mingw-crt-x86_64:@MINGW_VERSION@ AS mingw-crt-x86_64
+FROM @PROTONSDK_URLBASE@/mingw-pthreads-i686:@MINGW_VERSION@ AS mingw-pthreads-i686
+FROM @PROTONSDK_URLBASE@/mingw-pthreads-x86_64:@MINGW_VERSION@ AS mingw-pthreads-x86_64
+FROM @PROTONSDK_URLBASE@/mingw-widl-i686:@MINGW_VERSION@ AS mingw-widl-i686
+FROM @PROTONSDK_URLBASE@/mingw-widl-x86_64:@MINGW_VERSION@ AS mingw-widl-x86_64
+FROM @PROTONSDK_URLBASE@/gcc-i686-linux-gnu:@GCC_VERSION@ AS gcc-linux-i686
+FROM @PROTONSDK_URLBASE@/gcc-x86_64-linux-gnu:@GCC_VERSION@ AS gcc-linux-x86_64
+FROM @PROTONSDK_URLBASE@/gcc-i686-w64-mingw32:@GCC_VERSION@ AS gcc-mingw-i686
+FROM @PROTONSDK_URLBASE@/gcc-x86_64-w64-mingw32:@GCC_VERSION@ AS gcc-mingw-x86_64
+
+FROM @BASE_IMAGE@ AS base
+COPY --from=binutils-linux-i686   /opt/usr /usr
+COPY --from=binutils-linux-x86_64 /opt/usr /usr
+COPY --from=binutils-mingw-i686   /opt/usr /usr
+COPY --from=binutils-mingw-x86_64 /opt/usr /usr
+COPY --from=mingw-headers-i686    /opt/usr /usr
+COPY --from=mingw-headers-x86_64  /opt/usr /usr
+COPY --from=mingw-crt-i686        /opt/usr /usr
+COPY --from=mingw-crt-x86_64      /opt/usr /usr
+COPY --from=mingw-pthreads-i686   /opt/usr /usr
+COPY --from=mingw-pthreads-x86_64 /opt/usr /usr
+COPY --from=mingw-widl-i686       /opt/usr /usr
+COPY --from=mingw-widl-x86_64     /opt/usr /usr
+COPY --from=gcc-linux-i686        /opt/usr /usr
+COPY --from=gcc-linux-x86_64      /opt/usr /usr
+COPY --from=gcc-mingw-i686        /opt/usr /usr
+COPY --from=gcc-mingw-x86_64      /opt/usr /usr
+
+RUN wget -q @RUST_URLBASE@/@RUST_SOURCE_x86_64@ \
+&& echo '@RUST_SHA256_x86_64@ @RUST_SOURCE_x86_64@' | sha256sum -c - \
+&& tar xf @RUST_SOURCE_x86_64@ -C /tmp && rm @RUST_SOURCE_x86_64@ \
+&& /tmp/rust-@RUST_VERSION@-x86_64-unknown-linux-gnu/install.sh --prefix=/opt/rust \
+&& rm -rf /tmp/rust-@RUST_VERSION@-x86_64-unknown-linux-gnu
+
+RUN wget -q @RUST_URLBASE@/@RUST_SOURCE_i686@ \
+&& echo '@RUST_SHA256_i686@ @RUST_SOURCE_i686@' | sha256sum -c - \
+&& tar xf @RUST_SOURCE_i686@ -C /tmp && rm @RUST_SOURCE_i686@ \
+&& /tmp/rust-@RUST_VERSION@-i686-unknown-linux-gnu/install.sh --prefix=/opt/rust \
+  --components=rust-std-i686-unknown-linux-gnu \
+&& rm -rf /tmp/rust-@RUST_VERSION@-i686-unknown-linux-gnu
+
+RUN bash -c 'ls /opt/rust/bin/* | xargs -n1 -I{} ln -sf {} /usr/bin/'
+
+RUN bash -c 'mkdir -p /usr/lib/ccache && ls /usr/bin/{,*-}{cc,c++,gcc,g++}{,-[0-9]*} | sed -re s:/bin:/lib/ccache: | xargs -n1 ln -sf ../../bin/ccache'
+ENV PATH=/usr/lib/ccache:$PATH
+
+RUN apt-get install -y \
+  libxpresent-dev \
+  libxpresent-dev:i386 \
+  python3-pefile \
+  libcapstone-dev \
+  libcapstone-dev:i386 \
+&& rm -rf /opt/usr/share/doc /opt/usr/share/info /opt/usr/share/man \
+&& rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT ["/usr/bin/tini-static", "-s", "-g", "--"]
+
+CMD ["/bin/bash"]
+Proton (soldier) SDK
+====================
+
+These are the build rules that are used to create docker images to build
+Proton. The automated creation of the official images lives in
+<https://gitlab.steamos.cloud/proton/soldier/sdk>, but this can be
+used to create local images too.
+
+Local usage
+-----------
+
+The `protonsdk_version` make variable will override which image is used
+to build Proton, but may not trigger a full rebuild, so building from
+scratch may be necessary.
+
+Building Proton with a locally build docker image, instead of using the
+official images, can be done by using `protonsdk_version=local`. This
+may be used for instance to test changes to the docker image recipes.
+
+Or, it is also possible to build the docker images first by invoking
+`make protonsdk` and it will tag the images with the `protonsdk_version`
+variable value.
+
+Official images
+---------------
+
+To update the official Proton SDK images:
+
+1) Update the image build rules, `STEAMRT_VERSION` and
+   `PROTONSDK_VERSION` version numbers in this folder, test locally,
+   commit and push the changes.
+
+2) Update `.gitlab-ci.yml` in the
+   [Proton SDK](https://gitlab.steamos.cloud/proton/soldier/sdk)
+   repository to point to the new commit, commit and push to trigger a
+   new build of "-dev" images.
+
+3) Once the images are satifying, tag the version in Proton SDK
+   repository and push the tag, this will trigger a new build of the
+   images and version them with the same tag as the Git tag.
+
+4) Once the images have been published, update the default
+   `arg_protonsdk_image` version number in `configure.sh` to use the
+   newly built images by default.
+
+Any change or addition to GPL-ed source first requires to update or add
+the corresponding source to <https://repo.steampowered.com/proton-sdk>.
+The `SOURCES_URLBASE` variable must be used to download the sources
+from there, and its sha256 must be added to validate the sources in the
+same way the existing code does.
+
+Technical details
+-----------------
+
+The images are built incrementally, with intermediate images created
+for each component of the toolchain, then assembled together in a single
+`proton` image.
+
+The reason behind this is to optimize the use of docker cache, so that
+components that didn't change do not require to be rebuilt every time,
+saving a lot of time in the build process, when only small additions are
+made.
+
+It also lets us build several components of the toolchain separately,
+in parallel. This is especially the case when building the images on
+the <https://gitlab.steamos.cloud> CI.
+
+Because the `ARG` parameter in Dockerfile doesn't behave nicely with
+docker caches it is avoided, and `Dockerfile.in` are used with variable
+replacements done using `sed`.
+
+The <https://gitlab.steamos.cloud> CI uses Kaniko instead of Docker,
+with a bit of script conversion to generate commands usable there. More
+details are available in
+[Proton SDK](https://gitlab.steamos.cloud/proton/soldier/sdk).
+
+The `build-base` images are there to create a common ground to build the
+other elements of the toolchain. They are based on fairly recent (more
+than what `steamrt` provides), but they are only used temporarily to
+build a static version of the Binutils, MinGW and GCC binaries, which
+are then copied over the `steamrt` base image.
+
+
